@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fault Lab - Probabilistic Digital Circuit Fault Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 50:'#f4f5f6', 100:'#e8eaec', 200:'#d3d7db', 300:'#b9c0c6', 400:'#97a1aa', 500:'#74808a', 600:'#55606a', 700:'#3d4650', 800:'#2d343c', 850:'#252b32', 900:'#1d2228', 950:'#14171b' },
+                        cyan:    { 300:'#9cc5c0', 400:'#79ada6', 500:'#5c938c', 600:'#487a74', 700:'#38605b' },
+                        emerald: { 300:'#bccfb0', 400:'#9bb98c', 500:'#7f9f70', 600:'#678559', 800:'#3c4e36', 900:'#2c3a28' },
+                        amber:   { 400:'#d4ae63', 500:'#c09844', 600:'#a07c32' },
+                        rose:    { 400:'#d58570', 500:'#c36e58', 800:'#6e3d32', 900:'#4c2b25' },
+                        violet:  { 400:'#a99bbd' },
+                        blue:    { 400:'#86a0bb', 500:'#6f8dab', 600:'#5a7794' }
+                    },
+                    fontFamily: { sans: ['Franklin Gothic Medium', 'Franklin Gothic', 'Libre Franklin', 'Arial Narrow', 'Arial', 'sans-serif'], mono: ['Franklin Gothic Medium', 'Franklin Gothic', 'Libre Franklin', 'Arial Narrow', 'Arial', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root { color-scheme: dark; }
+        body { font-family: "Franklin Gothic Medium", "Franklin Gothic", "Libre Franklin", "Arial Narrow", Arial, sans-serif; background-color: #14171b; color: #d3d7db; overflow: hidden; font-weight: 500; }
+
+        /* BLOCK LETTERS EVERYWHERE */
+        body { text-transform: uppercase; letter-spacing: 0.05em; }
+        select, option, input, button, textarea { text-transform: uppercase; letter-spacing: 0.05em; font-family: inherit; }
+        svg text { text-transform: uppercase; }
+        h1, h2, h3 { letter-spacing: 0.08em; }
+
+        /* Flat, blocky panels with a subtle corner radius */
+        .glass-panel { background: #1d2228; border: 1px solid #3d4650; backdrop-filter: none; }
+        /* Tall circuits: inspector panels move to a right-hand column so the schematic gets the full height */
+        #pane-visualizer[data-layout="side"] { flex-direction: row; }
+        #pane-visualizer[data-layout="side"] #insp-row { flex-direction: column; height: auto !important; width: 20rem; overflow-y: auto; border-top-width: 0 !important; border-left-width: 1px; box-shadow: none !important; }
+        #pane-visualizer[data-layout="side"] #insp-row > * { width: 100% !important; flex: 0 0 auto !important; }
+        #pane-visualizer[data-layout="side"] #insp-chart { height: 10rem; }
+        .rounded-2xl, .rounded-xl, .rounded-lg, .rounded-t-lg { border-radius: 6px !important; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        
+        /* Circuit SVG Styles */
+        .wire { fill: none; }
+        .gate-shape { fill: currentColor; stroke: currentColor; stroke-width: 2; transition: stroke-width 0.12s ease, fill-opacity 0.12s ease; }
+        .gate-line { fill: none; stroke: currentColor; stroke-width: 2; transition: stroke-width 0.12s ease; }
+        .gate-node { cursor: pointer; }
+        .gate-node:hover .gate-shape, .gate-node:hover .gate-line { stroke-width: 3; }
+    </style>
+    <style>
+      /* Fault Lab refresh: editorial instrument-panel styling */
+      :root { color-scheme: dark; --ink:#101820; --panel:#17232c; --panel-2:#1c2b35; --line:#2b3b45; --paper:#e9e4d9; --muted:#9ba8aa; --mint:#9bd8c2; --orange:#ff9b6a; --yellow:#f4d06f; }
+      * { box-sizing:border-box; }
+      body { font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; letter-spacing:normal !important; text-transform:none !important; color:var(--paper) !important; background:radial-gradient(ellipse at 70% -20%, #29404a 0%, transparent 42%),linear-gradient(140deg,#111a20,#101820 58%,#17232b) !important; overflow:auto !important; min-height:100vh; }
+      h1,h2,h3 { letter-spacing:-.035em !important; text-transform:none !important; }
+      .uppercase { text-transform:none !important; letter-spacing:.045em !important; }
+      select,option,input,button,textarea { text-transform:none !important; letter-spacing:normal !important; font:inherit; }
+      aside { background:#121d24 !important; border-color:#2a3b44 !important; box-shadow:12px 0 40px #080d1166 !important; }
+      aside > div:first-child { padding:24px 24px 20px !important; border-color:var(--line) !important; }
+      aside h1 { font-size:20px !important; font-weight:760 !important; }
+      aside h1 > div { border-radius:50%; box-shadow:0 0 18px #9bd8c288; }
+      aside label { color:#aab6b5 !important; font-size:11px !important; letter-spacing:.06em !important; }
+      select,input { background:#111b22 !important; border-color:#354751 !important; border-radius:10px !important; color:var(--paper) !important; min-height:42px; }
+      select:focus,input:focus { outline:2px solid #9bd8c277 !important; border-color:var(--mint) !important; }
+      button { border-radius:10px !important; cursor:pointer; transition:transform .18s ease,filter .18s ease,background .18s ease; }
+      button:hover { filter:brightness(1.12); transform:translateY(-1px); }
+      button:active { transform:translateY(0) scale(.99); }
+      #runBtn { background:#b5e2cf !important; border-color:#d7f4e5 !important; color:#12231e !important; min-height:48px; box-shadow:0 8px 24px #9bd8c222; }
+      #runBar { background:linear-gradient(90deg,var(--mint),var(--yellow)) !important; }
+      main { background:transparent !important; }
+      .glass-panel { background:linear-gradient(145deg,#1b2932ee,#17232bed) !important; border:1px solid #30414b !important; backdrop-filter:blur(10px); box-shadow:0 12px 28px #080d112e; }
+      .rounded-2xl,.rounded-xl,.rounded-lg,.rounded-t-lg { border-radius:14px !important; }
+      .text-white { color:#f3eee4 !important; }
+      .text-slate-400 { color:#a7b1b0 !important; }
+      .text-slate-500 { color:#8a999c !important; }
+      .bg-slate-800 { background:#24343d !important; }
+      .bg-slate-900,.bg-slate-950 { background-color:#121d24 !important; }
+      .border-slate-800,.border-slate-700 { border-color:#2b3b45 !important; }
+      .text-cyan-400,.text-cyan-300 { color:var(--mint) !important; }
+      .text-emerald-400 { color:#9bd8c2 !important; }
+      .text-amber-400 { color:var(--yellow) !important; }
+      .text-rose-400,.text-rose-500 { color:var(--orange) !important; }
+      .bg-cyan-600 { background:#346b62 !important; }
+      .bg-emerald-400 { background:var(--mint) !important; }
+      #tab-visualizer,#tab-analysis,#tab-compare,#tab-theory { border-radius:10px 10px 0 0 !important; padding:11px 16px !important; }
+      #pane-visualizer { background:radial-gradient(circle at 50% 42%,#22343d55,transparent 55%); }
+      #svgbox { background-color:#142129 !important; background-image:radial-gradient(#49606a55 1px,transparent 1px) !important; background-size:18px 18px !important; border-color:#344750 !important; }
+      .gate-node { cursor:pointer; }
+      .gate-node:hover { filter:drop-shadow(0 0 8px #9bd8c2aa); }
+      #insp-row { background:#121d24ee !important; border-color:#2b3b45 !important; }
+      table thead { background:#22313a !important; }
+      canvas { max-width:100%; }
+      .lab-hero { margin:14px 16px 0; padding:18px 22px; border:1px solid #30414b; border-radius:16px; background:linear-gradient(105deg,#1b2b33e8,#1b2932a8 65%,#28352f99); display:flex; align-items:center; justify-content:space-between; gap:24px; position:relative; overflow:hidden; }
+      .lab-hero:after { content:""; position:absolute; width:220px;height:220px;right:8%;top:-140px;border:1px solid #9bd8c233;border-radius:50%;box-shadow:0 0 0 18px #9bd8c20b,0 0 0 38px #9bd8c208;pointer-events:none; }
+      .lab-hero .eyebrow { color:var(--mint); font-size:10px; text-transform:uppercase; letter-spacing:.16em !important; font-weight:750; }
+      .lab-hero h2 { font-size:clamp(21px,2.3vw,30px); line-height:1.08; margin:7px 0 5px; max-width:700px; }
+      .lab-hero p { color:#aab7b5; margin:0; font-size:13px; line-height:1.5; }
+      .hero-stamp { position:relative;z-index:1; white-space:nowrap;color:#e8e1d5;border-left:1px solid #47605f;padding-left:18px;font:12px ui-monospace,monospace; }
+      #pane-theory { background:#121d24; }
+      .theory-wrap { max-width:1360px;margin:0 auto; }
+      .theory-intro { padding:6px 2px 20px; }
+      .theory-intro .eyebrow { color:var(--orange);font-size:10px;letter-spacing:.15em !important;text-transform:uppercase; }
+      .theory-intro h2 { font-size:32px;margin:8px 0; }
+      .theory-intro p { max-width:760px;color:#aab7b5;line-height:1.65;margin:0; }
+      .theory-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px; }
+      .theory-card { border:1px solid #30414b;background:linear-gradient(145deg,#1b2932,#17232b);border-radius:14px;padding:20px;min-height:174px; }
+      .theory-card .num { color:var(--orange);font:12px ui-monospace,monospace; }
+      .theory-card h3 { font-size:18px;margin:9px 0 8px; }
+      .theory-card p { margin:0;color:#aab7b5;line-height:1.65;font-size:13px; }
+      .equation { margin-top:13px;padding:11px 13px;background:#101a20;border:1px solid #2b3b45;border-radius:9px;color:var(--mint);font:14px ui-monospace,monospace;overflow:auto; }
+      details.theory-card { min-height:0; }
+      details.theory-card summary { cursor:pointer;list-style:none; }
+      details.theory-card summary::-webkit-details-marker { display:none; }
+      details.theory-card summary:after { content:"＋";float:right;color:var(--mint);font-size:18px; }
+      details.theory-card[open] summary:after { content:"−"; }
+      .theory-note { margin-top:14px;padding:16px 18px;border-left:3px solid var(--yellow);background:#f4d06f0d;color:#c5ceca;font-size:13px;line-height:1.6;border-radius:0 10px 10px 0; }
+      @media(max-width:900px) { body { display:flex !important;flex-direction:column !important; } aside { width:100% !important;height:auto !important;max-height:none; } aside .flex-1.overflow-auto { max-height:45vh; } main { min-height:100vh; } .theory-grid { grid-template-columns:1fr; } }
+      @media(max-width:650px) { .lab-hero { align-items:flex-start;flex-direction:column;padding:16px; } .hero-stamp { border-left:0;border-top:1px solid #47605f;padding:10px 0 0; } #insp-row { height:auto !important;max-height:none;flex-direction:column; } #insp-row > * { width:100% !important;min-height:150px; } #pane-visualizer { overflow:auto; } #svg-container { min-height:360px; } #pane-analysis,#pane-compare,#pane-theory { padding:16px !important; } }
+      @media(prefers-reduced-motion:reduce) { *,*:before,*:after { scroll-behavior:auto !important;animation-duration:.01ms !important;transition-duration:.01ms !important; } }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col md:flex-row text-sm">
+
+    <!-- Sidebar / Settings -->
+    <aside class="w-full md:w-80 border-r border-slate-800 bg-slate-900/90 flex flex-col h-full shrink-0 relative z-20 shadow-2xl">
+        <div class="p-6 border-b border-slate-800">
+            <h1 class="text-xl font-bold text-white flex items-center">
+                <div class="w-3 h-3 bg-cyan-400 mr-3"></div>
+                Fault Lab 2.0
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Advanced Reliability Analysis</p>
+        </div>
+        
+        <div class="flex-1 overflow-auto p-6 space-y-5 scrollbar-hide">
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Circuit Architecture</label>
+                <select id="circ" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500 transition-colors">
+                    <option value="rca4">4-bit Ripple Carry Adder</option>
+                    <option value="rca8">8-bit Ripple Carry Adder</option>
+                    <option value="cla4">4-bit Carry Lookahead Adder</option>
+                    <option value="mult2">2-bit Multiplier</option>
+                <option value="mux8">8-bit Multiplexer (8:1)</option>
+                <option value="demux8">8-bit Demultiplexer (1:8)</option>
+                <option value="cmp3">3-bit Comparator</option>
+                <option value="sub4">4-bit Subtractor</option>
+                </select>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-800">
+                <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Fault Model</label>
+                <select id="model" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500 transition-colors mb-3">
+                    <option value="bern">Bernoulli (Fault/No Fault)</option>
+                    <option value="pois">Poisson (Transient Events)</option>
+                    <option value="exp">Exponential (Constant Rate)</option>
+                    <option value="weib">Weibull (Aging/Wear-out)</option>
+                </select>
+                
+                <label class="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Fault Type</label>
+                <select id="ft" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500 transition-colors">
+                    <option value="rand">Random Gate Failure</option>
+                    <option value="sa0">Stuck-at-0</option>
+                    <option value="sa1">Stuck-at-1</option>
+                    <option value="flip">Transient Bit Flip</option>
+                </select>
+            </div>
+            
+            <div id="cfg-bern" class="space-y-3">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Gate Fault Probability (%)</label>
+                    <input id="p" type="number" value="2" step="0.1" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                </div>
+            </div>
+            
+            <div id="cfg-rate" class="space-y-3 hidden">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Failure rate <span style="text-transform:none">λ</span> (1/hour)</label>
+                    <input id="lam" type="number" value="0.0005" step="0.0001" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                </div>
+            </div>
+            
+            <div id="cfg-weib" class="space-y-3 hidden">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Shape <span style="text-transform:none">β</span></label>
+                        <input id="beta" type="number" value="2" step="0.1" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Scale <span style="text-transform:none">η</span> (hrs)</label>
+                        <input id="eta" type="number" value="1000" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                    </div>
+                </div>
+            </div>
+            
+            <div id="cfg-time" class="space-y-3 hidden">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">Mission Time <span style="text-transform:none">t</span> (hours)</label>
+                    <input id="t" type="number" value="100" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                </div>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-800 space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">MC Trials</label>
+                        <select id="N" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                            <option value="1000">1,000</option>
+                            <option value="10000" selected>10,000</option>
+                            <option value="50000">50,000</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">RNG Seed</label>
+                        <input id="seed" type="number" value="42" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-cyan-500">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6 border-t border-slate-800 bg-slate-900">
+            <button id="runBtn" onclick="runAll()" class="w-full bg-cyan-600 hover:bg-cyan-500 border border-cyan-400/40 text-white font-bold py-3 px-4 rounded-xl transition-all">
+                Run Simulation
+            </button>
+            <div class="mt-4 h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div id="runBar" class="h-full bg-emerald-400 w-0 transition-all duration-300"></div>
+            </div>
+            <div id="runStatus" class="mt-2 text-xs text-center text-slate-400 h-4"></div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full min-w-0 bg-slate-950 relative z-10">
+        
+        <section class="lab-hero">
+            <div><div class="eyebrow">Interactive reliability workbench · Probability &amp; digital logic</div><h2>When one gate slips, what happens to the whole circuit?</h2><p>Inject a fault, follow its path, then see how architecture and probability change the outcome.</p></div>
+            <div class="hero-stamp">FIELD NOTE 01<br>FAULTS · MASKING · RELIABILITY</div>
+        </section>
+        <!-- Top KPIs -->
+        <div class="p-4 pb-0 grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="glass-panel p-4 rounded-2xl border-t-2 border-t-emerald-500 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-emerald-500/5 group-hover:bg-emerald-500/10 transition-colors"></div>
+                <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Reliability</div>
+                <div id="kpi-rel" class="text-2xl font-mono text-white mt-0.5 relative z-10">--</div>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl border-t-2 border-t-rose-500 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-rose-500/5 group-hover:bg-rose-500/10 transition-colors"></div>
+                <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Failure Prob</div>
+                <div id="kpi-fail" class="text-2xl font-mono text-white mt-0.5 relative z-10">--</div>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl border-t-2 border-t-cyan-500 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-cyan-500/5 group-hover:bg-cyan-500/10 transition-colors"></div>
+                <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Masked Faults</div>
+                <div id="kpi-mask" class="text-2xl font-mono text-white mt-0.5 relative z-10">--</div>
+            </div>
+            <div class="glass-panel p-4 rounded-2xl border-t-2 border-t-amber-500 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-amber-500/5 group-hover:bg-amber-500/10 transition-colors"></div>
+                <div class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Top Vulnerable Gate</div>
+                <div id="kpi-vuln" class="text-2xl font-mono text-white mt-0.5 relative z-10">--</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="px-4 pt-3 flex space-x-2">
+            <button onclick="switchTab('visualizer')" id="tab-visualizer" class="px-5 py-2 rounded-t-lg font-semibold text-white bg-slate-800 border-b-2 border-cyan-400 transition-colors">Circuit Visualizer</button>
+            <button onclick="switchTab('analysis')" id="tab-analysis" class="px-5 py-2 rounded-t-lg font-semibold text-slate-400 hover:text-white hover:bg-slate-800/50 border-b-2 border-transparent transition-colors">Reliability Analysis</button>
+            <button onclick="switchTab('compare')" id="tab-compare" class="px-5 py-2 rounded-t-lg font-semibold text-slate-400 hover:text-white hover:bg-slate-800/50 border-b-2 border-transparent transition-colors">Architecture Compare</button>
+            <button onclick="switchTab('theory')" id="tab-theory" class="px-5 py-2 rounded-t-lg font-semibold text-slate-400 hover:text-white hover:bg-slate-800/50 border-b-2 border-transparent transition-colors">Circuit field guide</button>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="flex-1 overflow-hidden bg-slate-900/40 border-t border-slate-800 flex flex-col relative shadow-inner">
+            
+            <!-- VISUALIZER PANE -->
+            <div id="pane-visualizer" data-layout="bottom" class="absolute inset-0 flex flex-col">
+                <div class="flex-1 min-h-0 min-w-0 overflow-hidden relative" id="svg-container">
+                    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-800/20 via-transparent to-transparent pointer-events-none"></div>
+                    <div id="svgbox" class="absolute inset-3 p-2 rounded-xl border border-slate-800/50 bg-slate-900/30"></div>
+                </div>
+                
+                <!-- Gate Inspector Panel -->
+                <div id="insp-row" class="h-[clamp(240px,35vh,330px)] shrink-0 border-t border-slate-800 bg-slate-900/95 p-3 flex gap-3 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+                    <div class="w-1/4 glass-panel rounded-xl p-3 flex flex-col overflow-auto bg-slate-900/80 border border-slate-700 relative">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><svg class="w-12 h-12 text-amber-500" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 4l7.5 15h-15L12 6zm-1 4v6h2v-6h-2zm0 8v2h2v-2h-2z"/></svg></div>
+                        <h3 class="text-white font-semibold mb-2 flex items-center text-sm border-b border-slate-800 pb-2 relative z-10">
+                            <span class="w-2.5 h-2.5 bg-amber-400 mr-3"></span>Gate Inspector
+                        </h3>
+                        <div id="inspector-content" class="text-sm text-slate-400 flex-1 relative z-10">Select a gate in the schematic to view its reliability metrics.</div>
+                    </div>
+                    
+                    <div id="insp-chart" class="flex-1 glass-panel rounded-xl p-3 flex flex-col bg-slate-900/80 border border-slate-700">
+                        <h3 class="text-white font-semibold mb-2 text-sm flex items-center">
+                            <span class="w-2.5 h-2.5 bg-cyan-400 mr-3"></span>Individual Gate Risk Analysis
+                        </h3>
+                        <div class="flex-1 relative w-full h-full">
+                            <canvas id="chartGateTime"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="w-1/4 glass-panel rounded-xl p-3 flex flex-col overflow-auto bg-slate-900/80 border border-slate-700 relative">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><svg class="w-12 h-12 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg></div>
+                        <h3 class="text-white font-semibold mb-2 flex items-center text-sm border-b border-slate-800 pb-2 relative z-10">
+                            <span class="w-2.5 h-2.5 bg-emerald-400 mr-3"></span>Simulation Trace
+                        </h3>
+                        <div id="trace-content" class="text-sm text-slate-400 flex-1 relative z-10">Inject a fault to trace its propagation.</div>
+                        <div class="mt-auto flex gap-3 pt-2 border-t border-slate-800 relative z-10">
+                            <button onclick="injectFault()" class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-lg">Random Fault</button>
+                            <button onclick="injectSelectedFault()" class="flex-1 bg-cyan-600 hover:bg-cyan-500 border border-cyan-400/40 text-white py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors">Inject Selected</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ANALYSIS PANE -->
+            <div id="pane-analysis" class="absolute inset-0 hidden overflow-auto p-8 scrollbar-hide">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 max-w-[1600px] mx-auto">
+                    <div class="glass-panel rounded-2xl p-6 h-[380px] bg-slate-900/60 border-slate-700 shadow-lg"><canvas id="chartRelProb"></canvas></div>
+                    <div class="glass-panel rounded-2xl p-6 h-[380px] bg-slate-900/60 border-slate-700 shadow-lg"><canvas id="chartRelTime"></canvas></div>
+                    <div class="glass-panel rounded-2xl p-6 h-[380px] bg-slate-900/60 border-slate-700 shadow-lg"><canvas id="chartConv"></canvas></div>
+                    
+                    <div class="glass-panel rounded-2xl p-6 flex flex-col bg-slate-900/60 border-slate-700 h-[380px] shadow-lg">
+                        <h3 class="text-white font-semibold mb-4 text-lg border-b border-slate-800 pb-2">Gate Vulnerability Ranking</h3>
+                        <div class="flex-1 overflow-auto rounded-xl border border-slate-800 bg-slate-950/50">
+                            <table class="w-full text-left text-sm text-slate-300">
+                                <thead class="text-xs uppercase bg-slate-800 text-slate-400 sticky top-0 shadow-md">
+                                    <tr><th class="px-5 py-4">Gate</th><th class="px-5 py-4">Type</th><th class="px-5 py-4">Failures</th><th class="px-5 py-4">Sensitivity</th></tr>
+                                </thead>
+                                <tbody id="vuln-table-body" class="divide-y divide-slate-800/80 font-mono text-sm"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- THEORY PANE -->
+            <div id="pane-theory" class="absolute inset-0 hidden overflow-auto p-8 scrollbar-hide">
+                <div class="theory-wrap">
+                    <div class="theory-intro"><div class="eyebrow">A short field guide</div><h2>Why circuits fail — and why some faults disappear</h2><p>A digital circuit is a network of Boolean operations. A fault at one gate changes the signal there, but it only becomes a system error if the changed value travels to an output and changes the answer.</p></div>
+                    <div class="theory-grid">
+                        <article class="theory-card"><div class="num">01 / PROPAGATION</div><h3>Faults need a path to the output</h3><p>A gate error can be blocked by a later logic condition. For example, an AND gate outputs 0 if either input is 0, so a faulty 1 on the other input may be hidden. This is fault masking.</p><div class="equation">system error = output(faulty) ≠ output(correct)</div></article>
+                        <article class="theory-card"><div class="num">02 / BERNOULLI MODEL</div><h3>One coin flip per gate</h3><p>In the Bernoulli model each gate independently fails with probability <em>p</em>. For a simple series chain of <em>n</em> essential gates, every gate must work.</p><div class="equation">R = (1 − p)<sup>n</sup> &nbsp; · &nbsp; P(failure) = 1 − R</div></article>
+                        <article class="theory-card"><div class="num">03 / TIME TO FAILURE</div><h3>Constant rate or aging?</h3><p>Exponential reliability assumes a constant failure rate λ. Weibull adds a shape β: β &gt; 1 models increasing wear-out risk; β &lt; 1 models early-life failures.</p><div class="equation">R<sub>exp</sub>(t) = e<sup>−λt</sup> &nbsp; · &nbsp; R<sub>weib</sub>(t) = e<sup>−(t/η)<sup>β</sup></sup></div></article>
+                        <article class="theory-card"><div class="num">04 / MONTE CARLO</div><h3>Estimate by repeating the experiment</h3><p>The simulator samples many fault patterns and input combinations. Reliability is the fraction of trials whose observed output remains correct. More trials reduce sampling noise.</p><div class="equation">R̂ = successful trials / N &nbsp; · &nbsp; SE ≈ √[R̂(1−R̂)/N]</div></article>
+                        <details class="theory-card"><summary><div class="num">05 / ARCHITECTURE</div><h3>Ripple carry vs. lookahead</h3></summary><p>A ripple-carry adder passes carry from one bit stage to the next: it is compact and easy to build, but the carry path grows with bit width. A carry-lookahead adder computes propagate and generate terms so carries can be resolved in parallel, trading more logic and wiring for lower delay. Different structures also create different fault paths and masking behavior.</p><div class="equation">P<sub>i</sub> = A<sub>i</sub> ⊕ B<sub>i</sub> &nbsp; · &nbsp; G<sub>i</sub> = A<sub>i</sub>B<sub>i</sub> &nbsp; · &nbsp; C<sub>i+1</sub> = G<sub>i</sub> + P<sub>i</sub>C<sub>i</sub></div></details>
+                        <details class="theory-card"><summary><div class="num">06 / FAULT TYPES</div><h3>Stuck-at and transient faults</h3></summary><p>A stuck-at-0 or stuck-at-1 fault holds a gate output at a fixed logic value. A transient bit flip changes a value for one evaluation. The selected fault model controls how likely failures are; the selected fault type controls what is injected in the trace.</p><div class="equation">SA0: y = 0 &nbsp; · &nbsp; SA1: y = 1 &nbsp; · &nbsp; transient: y → ¬y</div></details>
+                    </div>
+                    <div class="theory-note"><strong>Reading the charts:</strong> sensitivity is the share of sampled input patterns for which a fault at a gate changes an output. High sensitivity means that gate is more exposed in this experiment; it does not, by itself, mean that the gate is more likely to fail.</div>
+                </div>
+            </div>
+            <!-- COMPARE PANE -->
+            <div id="pane-compare" class="absolute inset-0 hidden overflow-auto p-8">
+                <div class="max-w-[1600px] mx-auto">
+                    <div class="glass-panel rounded-2xl p-8 bg-slate-900/60 border-slate-700 mb-8 shadow-lg">
+                        <h3 class="text-white font-bold mb-6 text-xl flex items-center">
+                            <svg class="w-6 h-6 mr-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            Architecture Performance Comparison
+                        </h3>
+                        <div class="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/50 shadow-inner">
+                            <table class="w-full text-left text-sm text-slate-300">
+                                <thead class="text-xs uppercase bg-slate-800 text-slate-400">
+                                    <tr>
+                                        <th class="px-6 py-4">Architecture</th>
+                                        <th class="px-6 py-4">Reliability</th>
+                                        <th class="px-6 py-4">Gate Count</th>
+                                        <th class="px-6 py-4">Most Vulnerable Gate (Sens)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="compare-table-body" class="divide-y divide-slate-800 font-medium text-base"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-panel rounded-2xl p-8 h-[500px] bg-slate-900/60 border-slate-700 shadow-lg">
+                        <canvas id="chartCmp"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </main>
+
+    <script>
+        /* === SVG Gate Shapes === */
+        const gateShapes = {
+            'AND': '<path d="M -15,-14 L 0,-14 A 14,14 0 0,1 14,0 A 14,14 0 0,1 0,14 L -15,14 Z" class="gate-shape"/>',
+            'OR': '<path d="M -15,-14 Q -2,-14 14,0 Q -2,14 -15,14 Q -5,0 -15,-14 Z" class="gate-shape"/>',
+            'XOR': '<path d="M -20,-14 Q -10,0 -20,14" class="gate-line"/><path d="M -15,-14 Q -2,-14 14,0 Q -2,14 -15,14 Q -5,0 -15,-14 Z" class="gate-shape"/>',
+            'NOT': '<path d="M -15,-12 L 9,0 L -15,12 Z" class="gate-shape"/><circle cx="12" cy="0" r="3" class="gate-line"/>'
+        };
+
+        /* === Core Simulation Engine === */
+        const rng = a => () => { a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return((t^t>>>14)>>>0)/4294967296; };
+        const pc = x => (x*100).toFixed(2)+'%';
+
+        function ev(C, inb, fm, v) {
+            for(let i=0; i<C.nin; i++) v[i] = (inb >> i) & 1;
+            for(const g of C.G) {
+                let r;
+                const a = g.in;
+                if(g.t === 'XOR') { r = v[a[0]]; for(let i=1; i<a.length; i++) r ^= v[a[i]]; }
+                else if(g.t === 'AND') { r = 1; for(const x of a) r &= v[x]; }
+                else if(g.t === 'NOT') { r = v[a[0]] ^ 1; }
+                else { r = 0; for(const x of a) r |= v[x]; } // OR
+                if(fm) { const f = fm[g.k]; if(f>=0) r = (f===2) ? r^1 : f; }
+                v[g.o] = r;
+            }
+        }
+        const wd = (C, v) => C.outs.reduce((a, o, i) => a | (v[o] << i), 0);
+
+        const mkP = (S, nG, ovrModel, ovrTime, ovrP) => {
+            let m = ovrModel || S.model;
+            let t = ovrTime !== undefined ? ovrTime : S.t;
+            let p = ovrP !== undefined ? ovrP : S.p;
+            return {
+                m, fti: S.fti,
+                q: m==='bern' ? p/100 : m==='exp' ? 1-Math.exp(-S.lam*t) : m==='weib' ? 1-Math.exp(-Math.pow(t/S.eta, S.beta)) : 0,
+                mean: m==='pois' ? S.lam*t*nG : 0
+            };
+        };
+
+        async function mc(C, P, seed, N, cb) {
+            const r = rng(seed), nG = C.G.length, v0 = new Uint8Array(C.ns), v1 = new Uint8Array(C.ns), fm = new Int8Array(nG);
+            const st = { N, fail:0, ft:0, nf:0, gf:Array(nG).fill(0), tf:[0,0,0], wb:0, log:[], cv:[] };
+            let cp = 10, c = 0;
+            const set = g => { if(fm[g]<0){c++; st.gf[g]++;} const t=P.fti<0 ? r()*3|0 : P.fti; fm[g]=t; st.tf[t]++; };
+            const maxInb = 1 << C.nin;
+            
+            for(let n=1; n<=N; n++) {
+                fm.fill(-1); c=0;
+                if(P.m==='pois') {
+                    let k=0, pp=1; const L=Math.exp(-P.mean);
+                    do{k++; pp*=r();}while(pp>L);
+                    for(k--; k>0; k--) set(r()*nG|0);
+                } else {
+                    for(let g=0; g<nG; g++) if(r()<P.q) set(g);
+                }
+                const inb = r()*maxInb|0;
+                if(c) {
+                    let bad=0; st.ft++; st.nf+=c;
+                    ev(C, inb, null, v0); ev(C, inb, fm, v1);
+                    for(const o of C.outs) if(v0[o] !== v1[o]) bad++;
+                    if(bad) { st.fail++; st.wb+=bad; }
+                }
+                if(n>=cp || n===N) { st.cv.push([n, 1-st.fail/n]); cp=Math.max(cp+1, cp*1.25|0); }
+                if(n%15000===0) { if(cb) cb(n/N); await new Promise(z=>setTimeout(z)); }
+            }
+            return st;
+        }
+
+        function sens(C, S, M) {
+            const r = rng(S.seed^0x5bd1e995), nG = C.G.length, v0 = new Uint8Array(C.ns), v1 = new Uint8Array(C.ns), fm = new Int8Array(nG).fill(-1);
+            const fl = Array(nG).fill(0), ti = [0,0,0], tf = [0,0,0], maxInb = 1 << C.nin;
+            for(let g=0; g<nG; g++) {
+                for(let m=0; m<M; m++) {
+                    const t = S.fti<0 ? r()*3|0 : S.fti;
+                    const inb = r()*maxInb|0;
+                    fm[g]=t; ev(C,inb,null,v0); ev(C,inb,fm,v1); fm[g]=-1;
+                    ti[t]++;
+                    if(C.outs.some(o => v0[o]!==v1[o])) { fl[g]++; tf[t]++; }
+                }
+            }
+            return {M, fl, ti, tf};
+        }
+
+        /* === Circuit Builders === */
+        function finishCircuit(G, nm, ix, nodes, outs, kind, w, h) {
+            let nin = 0;
+            for(let name in nodes) {
+                if(!G.find(gx => gx.id===name) && !name.startsWith('S') && !name.startsWith('M') && name!=='Cout' && name!=='HA1_S' && name!=='HA1_C' && name!=='HA2_S' && name!=='HA2_C' && !name.startsWith('P') && !name.startsWith('G')) nin++;
+            }
+            // fix nin for Multiplier
+            if (kind.includes('Multiplier')) nin = 4;
+            return { kind, G, nm, outs: outs.map(n=>ix[n]), ns: nm.length, nodes, width: w, height: h, nin };
+        }
+
+        function buildRCA(bits) {
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+            
+            addNode('Cin', 40, 140);
+            for(let i=0; i<bits; i++) { addNode('A'+i, 50 + i*260, 20); addNode('B'+i, 90 + i*260, 20); }
+            
+            let outs = [], prevC = 'Cin';
+            for(let i=0; i<bits; i++) {
+                const X = 50 + i * 260, Y = 60, f = `FA${i}.`;
+                gt('XOR', f+'X1', ['A'+i, 'B'+i], X+80, Y+20);
+                gt('AND', f+'N1', ['A'+i, 'B'+i], X+80, Y+80);
+                gt('XOR', f+'X2', [f+'X1', prevC], X+160, Y+60);
+                gt('AND', f+'N2', [f+'X1', prevC], X+160, Y+120);
+                gt('OR',  f+'O1', [f+'N1', f+'N2'], X+220, Y+100);
+                outs.push(f+'X2'); prevC = f+'O1';
+            }
+            outs.push(prevC);
+            
+            outs.forEach((o, i) => { let src = nodes[o]; addNode(i < bits ? 'S'+i : 'Cout', src.x + 80, src.y); });
+            return finishCircuit(G, nm, ix, nodes, outs, `${bits}-bit RCA`, 100 + bits*260, 280);
+        }
+
+        function buildCLA(bits) {
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+            
+            addNode('Cin', 40, 50);
+            for(let i=0; i<bits; i++) { addNode('A'+i, 40, 100 + i*130); addNode('B'+i, 40, 130 + i*130); }
+            
+            for(let i=0; i<bits; i++) {
+                gt('XOR', 'P'+i, ['A'+i, 'B'+i], 120, 100 + i*130);
+                gt('AND', 'G'+i, ['A'+i, 'B'+i], 120, 140 + i*130);
+            }
+            
+            for(let k=1; k<=bits; k++) {
+                const T = ['G'+(k-1)];
+                for(let j=k-2; j>=-1; j--) {
+                    const a = []; for(let m=k-1; m>j; m--) a.push('P'+m);
+                    a.push(j>=0 ? 'G'+j : 'Cin');
+                    gt('AND', `C${k}.T${j+1}`, a, 180 + k*120, 40 + j*40 + k*120);
+                    T.push(`C${k}.T${j+1}`);
+                }
+                gt('OR', 'C'+k, T, 280 + k*120, 80 + k*120);
+            }
+            
+            let outs = [];
+            for(let i=0; i<bits; i++) {
+                gt('XOR', 'S'+i, ['P'+i, i ? 'C'+i : 'Cin'], 320 + bits*120, 110 + i*130);
+                outs.push('S'+i);
+            }
+            outs.push('C'+bits);
+            
+            outs.forEach((o, i) => { let src = nodes[o]; addNode(i < bits ? 'S'+i : 'Cout', src.x + 80, src.y); });
+            return finishCircuit(G, nm, ix, nodes, outs, `${bits}-bit CLA`, 450 + bits*120, 150 + bits*130);
+        }
+
+        function buildMult2() {
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+            
+            addNode('A0', 60, 50); addNode('A1', 60, 100); addNode('B0', 60, 150); addNode('B1', 60, 200);
+            gt('AND', 'P00', ['A0', 'B0'], 150, 50); gt('AND', 'P10', ['A1', 'B0'], 150, 100);
+            gt('AND', 'P01', ['A0', 'B1'], 150, 150); gt('AND', 'P11', ['A1', 'B1'], 150, 200);
+            gt('XOR', 'HA1_S', ['P10', 'P01'], 300, 120); gt('AND', 'HA1_C', ['P10', 'P01'], 300, 170);
+            gt('XOR', 'HA2_S', ['P11', 'HA1_C'], 450, 180); gt('AND', 'HA2_C', ['P11', 'HA1_C'], 450, 230);
+            
+            let outs = ['P00', 'HA1_S', 'HA2_S', 'HA2_C'];
+            outs.forEach((o, i) => { let src = nodes[o]; addNode('M'+i, src.x + 80, src.y); });
+            return finishCircuit(G, nm, ix, nodes, outs, '2-bit Multiplier', 650, 320);
+        }
+
+
+        /* === Additional Circuit Builders === */
+        function buildMux8() {
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+
+            for(let i=0; i<8; i++) addNode('I'+i, 70, 40 + i*50);
+            for(let k=0; k<3; k++) addNode('SEL'+k, 70, 450 + k*40);
+            for(let k=0; k<3; k++) gt('NOT', 'nSEL'+k, ['SEL'+k], 170, 450 + k*40);
+
+            const terms = [];
+            for(let i=0; i<8; i++) {
+                const lit = []; for(let k=2; k>=0; k--) lit.push(((i >> k) & 1) ? 'SEL'+k : 'nSEL'+k);
+                terms.push(gt('AND', 'T'+i, ['I'+i, ...lit], 340, 40 + i*50));
+            }
+            gt('OR', 'MUX.OR', terms, 500, 215);
+            addNode('Y', 580, 215);
+
+            const C = finishCircuit(G, nm, ix, nodes, ['MUX.OR'], '8-bit Multiplexer (8:1)', 680, 540);
+            C.nin = 11; C.outLabels = ['Y']; return C;
+        }
+
+        function buildDemux8() {
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+
+            addNode('D', 70, 215);
+            for(let k=0; k<3; k++) addNode('SEL'+k, 70, 450 + k*40);
+            for(let k=0; k<3; k++) gt('NOT', 'nSEL'+k, ['SEL'+k], 170, 450 + k*40);
+
+            const outs = [];
+            for(let i=0; i<8; i++) {
+                const lit = []; for(let k=2; k>=0; k--) lit.push(((i >> k) & 1) ? 'SEL'+k : 'nSEL'+k);
+                outs.push(gt('AND', 'Q'+i, ['D', ...lit], 340, 40 + i*50));
+            }
+            outs.forEach((o, i) => addNode('Y'+i, nodes[o].x + 80, nodes[o].y));
+
+            const C = finishCircuit(G, nm, ix, nodes, outs, '8-bit Demultiplexer (1:8)', 520, 540);
+            C.nin = 4; C.outLabels = outs.map((_, i) => 'Y'+i); return C;
+        }
+
+        function buildCmp3() {
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+
+            for(let i=0; i<3; i++) addNode('A'+i, 70, 40 + i*45);
+            for(let i=0; i<3; i++) addNode('B'+i, 70, 190 + i*45);
+
+            // per-bit: inverted inputs and XOR, then equal / greater / less
+            for(let i=0; i<3; i++) {
+                const yb = 50 + i*150;
+                gt('NOT', 'nA'+i, ['A'+i], 170, yb);
+                gt('NOT', 'nB'+i, ['B'+i], 170, yb + 45);
+                gt('XOR', 'X'+i,  ['A'+i, 'B'+i], 170, yb + 90);
+            }
+            for(let i=0; i<3; i++) {
+                const yb = 50 + i*150;
+                gt('NOT', 'E'+i, ['X'+i], 260, yb + 90);                 // bits equal (XNOR)
+                gt('AND', 'G'+i, ['A'+i, 'nB'+i], 260, yb);              // A>B at this bit
+                gt('AND', 'L'+i, ['nA'+i, 'B'+i], 260, yb + 45);         // A<B at this bit
+            }
+            gt('AND', 'GT.T1', ['E2', 'G1'], 380, 120);
+            gt('AND', 'GT.T0', ['E2', 'E1', 'G0'], 380, 170);
+            gt('AND', 'EQ.AND', ['E2', 'E1', 'E0'], 380, 260);
+            gt('AND', 'LT.T1', ['E2', 'L1'], 380, 350);
+            gt('AND', 'LT.T0', ['E2', 'E1', 'L0'], 380, 400);
+            gt('OR',  'GT.OR', ['G2', 'GT.T1', 'GT.T0'], 500, 140);
+            gt('OR',  'LT.OR', ['L2', 'LT.T1', 'LT.T0'], 500, 380);
+
+            const outs = ['GT.OR', 'EQ.AND', 'LT.OR'], labels = ['GT', 'EQ', 'LT'];
+            outs.forEach((o, i) => addNode(labels[i], nodes[o].x + 80, nodes[o].y));
+
+            const C = finishCircuit(G, nm, ix, nodes, outs, '3-bit Comparator', 660, 520);
+            C.nin = 6; C.outLabels = labels; return C;
+        }
+
+        function buildSub4() {
+            const bits = 4;
+            const G = [], nm = [], ix = {}, nodes = {};
+            const addNode = (id, x, y) => { ix[id] = nm.length; nm.push(id); nodes[id] = {id, x, y}; return id; };
+            const gt = (t, id, ins, x, y) => { ix[id] = nm.length; nm.push(id); G.push({ id, t, in: ins.map(n => ix[n]), o: ix[id], k: G.length, x, y }); nodes[id] = {id, x, y}; return id; };
+
+            addNode('Bin', 40, 140);
+            for(let i=0; i<bits; i++) { addNode('A'+i, 50 + i*300, 20); addNode('B'+i, 90 + i*300, 20); }
+
+            let outs = [], prevB = 'Bin';
+            for(let i=0; i<bits; i++) {
+                const X = 50 + i * 300, Y = 60, f = `FS${i}.`;
+                gt('XOR', f+'X1', ['A'+i, 'B'+i], X+80, Y+10);          // A xor B
+                gt('NOT', f+'NA', ['A'+i], X+80, Y+90);                 // ~A
+                gt('NOT', f+'NX', [f+'X1'], X+150, Y+150);              // ~(A xor B)
+                gt('XOR', f+'D',  [f+'X1', prevB], X+170, Y+30);        // difference bit
+                gt('AND', f+'N1', [f+'NA', 'B'+i], X+170, Y+90);        // ~A & B
+                gt('AND', f+'N2', [f+'NX', prevB], X+215, Y+150);       // ~(A xor B) & Bin
+                gt('OR',  f+'Bo', [f+'N1', f+'N2'], X+260, Y+120);      // borrow out
+                outs.push(f+'D'); prevB = f+'Bo';
+            }
+            outs.push(prevB);
+
+            const labels = ['D0', 'D1', 'D2', 'D3', 'Bout'];
+            outs.forEach((o, i) => addNode(labels[i], nodes[o].x + 80, nodes[o].y));
+
+            const C = finishCircuit(G, nm, ix, nodes, outs, '4-bit Subtractor', 150 + bits*300, 300);
+            C.nin = 1 + 2*bits; C.outLabels = labels; return C;
+        }
+
+        const isOutNode = (C, n) => C.outLabels ? C.outLabels.includes(n) : (n.startsWith('S') || n.startsWith('M') || n === 'Cout');
+
+        const CS = { 'rca4': buildRCA(4), 'rca8': buildRCA(8), 'cla4': buildCLA(4), 'mult2': buildMult2(), 'mux8': buildMux8(), 'demux8': buildDemux8(), 'cmp3': buildCmp3(), 'sub4': buildSub4() };
+        let runs = {}, currentCirc = 'rca4', currentRun = null, LS = null, T = null, selectedGate = null;
+        
+        /* === UI & Chart Config === */
+        Chart.defaults.color = '#97a1aa'; Chart.defaults.font.family = '\"Franklin Gothic Medium\", \"Franklin Gothic\", \"Libre Franklin\", \"Arial Narrow\", Arial, sans-serif';
+        Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(29,34,40,0.96)';
+        Chart.defaults.plugins.tooltip.titleColor = '#e8eaec'; Chart.defaults.plugins.tooltip.bodyColor = '#d3d7db';
+        Chart.defaults.borderColor = 'rgba(85,96,106,0.35)';
+        let chartRelProb, chartRelTime, chartConv, chartCmp, chartGateTimeInst;
+
+        function switchTab(tabId) {
+            ['visualizer', 'analysis', 'compare', 'theory'].forEach(t => {
+                document.getElementById('pane-'+t).classList.add('hidden');
+                let btn = document.getElementById('tab-'+t);
+                btn.classList.remove('text-white', 'bg-slate-800', 'border-cyan-400');
+                btn.classList.add('text-slate-400', 'border-transparent');
+            });
+            document.getElementById('pane-'+tabId).classList.remove('hidden');
+            if (tabId === 'visualizer') fitCircuit();
+            let btn = document.getElementById('tab-'+tabId);
+            btn.classList.remove('text-slate-400', 'border-transparent');
+            btn.classList.add('text-white', 'bg-slate-800', 'border-cyan-400');
+        }
+
+        document.getElementById('model').onchange = e => {
+            const m = e.target.value;
+            document.getElementById('cfg-bern').classList.toggle('hidden', m !== 'bern');
+            document.getElementById('cfg-rate').classList.toggle('hidden', !['pois','exp'].includes(m));
+            document.getElementById('cfg-weib').classList.toggle('hidden', m !== 'weib');
+            document.getElementById('cfg-time').classList.toggle('hidden', m !== 'bern');
+        };
+
+        function readSettings() {
+            const S = {
+                model: document.getElementById('model').value, ft: document.getElementById('ft').value,
+                p: +document.getElementById('p').value, lam: +document.getElementById('lam').value,
+                beta: +document.getElementById('beta').value, eta: +document.getElementById('eta').value,
+                t: +document.getElementById('t').value, N: +document.getElementById('N').value, seed: +document.getElementById('seed').value
+            };
+            S.fti = {sa0:0, sa1:1, flip:2, rand:-1}[S.ft];
+            return S;
+        }
+
+        async function runAll() {
+            const S = readSettings(); if(!S) return; LS = S;
+            const btn = document.getElementById('runBtn'); btn.disabled = true; btn.innerHTML = 'Running... <svg class="animate-spin ml-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+            
+            const circs = Object.keys(CS); let k = 0;
+            currentCirc = document.getElementById('circ').value;
+            
+            for(const key of circs) {
+                const C = CS[key], nG = C.G.length, P = mkP(S, nG);
+                document.getElementById('runStatus').innerText = `Simulating ${C.kind}...`;
+                
+                const st = await mc(C, P, S.seed + k, S.N, f => { document.getElementById('runBar').style.width = ((k + f) / circs.length * 100) + '%'; });
+                const sn = sens(C, S, Math.min(S.N, 2000));
+                
+                const pp = []; for(let p of [0, 0.5, 1, 2, 5, 10, 20]) { let res = await mc(C, mkP(S, nG, 'bern', 0, p), S.seed+7, 2000); pp.push([p, 1 - res.fail/2000]); }
+                const te = [], tw = [];
+                for(let i=0; i<=10; i++) {
+                    let t = (S.t * 1.5) * (i/10);
+                    te.push([t, 1 - (await mc(C, mkP(S, nG, 'exp', t), S.seed, 1000)).fail/1000]);
+                    tw.push([t, 1 - (await mc(C, mkP(S, nG, 'weib', t), S.seed, 1000)).fail/1000]);
+                }
+                
+                runs[key] = { C, st, sn, P, pp, te, tw, rows: C.G.map((g,i) => ({id: g.id, type: g.t, main: st.gf[i], inj: sn.M, fail: sn.fl[i], sens: sn.fl[i]/sn.M})) };
+                k++;
+            }
+            
+            document.getElementById('runBar').style.width = '0%'; document.getElementById('runStatus').innerText = '';
+            btn.disabled = false; btn.innerText = 'Run Simulation';
+            
+            currentRun = runs[currentCirc]; T = null; selectedGate = null;
+            updateUI();
+        }
+
+        function updateUI() {
+            if(!currentRun) return;
+            const r = currentRun;
+            let rel = 1 - r.st.fail / r.st.N;
+            document.getElementById('kpi-rel').innerText = pc(rel);
+            document.getElementById('kpi-fail').innerText = pc(1-rel);
+            document.getElementById('kpi-mask').innerText = r.st.ft ? pc(1 - r.st.fail / r.st.ft) : 'N/A';
+            let top = [...r.rows].sort((a,b)=>b.sens-a.sens)[0];
+            document.getElementById('kpi-vuln').innerHTML = `<span class="text-white">${top.id}</span> <span class="text-sm text-amber-500">(${top.sens.toFixed(3)})</span>`;
+            
+            drawCirc(); updateAnalysisCharts(); updateCompareTab();
+            document.getElementById('inspector-content').innerHTML = 'Select a gate in the schematic to view its reliability metrics.';
+            document.getElementById('trace-content').innerHTML = 'Inject a fault to trace its propagation.';
+            if (chartGateTimeInst) { chartGateTimeInst.destroy(); chartGateTimeInst = null; }
+        }
+
+        function drawCirc() {
+            const C = currentRun.C; let svg = '';
+            const maxSens = currentRun.rows.reduce((max, row) => Math.max(max, row.sens), 0.001);
+            
+            C.G.forEach(g => {
+                g.in.forEach((inIdx, portIdx) => {
+                    const srcName = C.nm[inIdx], src = C.nodes[srcName];
+                    const isInputNode = !C.G.find(gx => gx.id === srcName);
+                    let sx = src.x + (isInputNode ? 0 : 15), sy = src.y;
+                    
+                    let dy = g.y;
+                    if (g.in.length > 1) dy += -10 + (portIdx * 20 / (g.in.length - 1));
+                    let dx = g.x - 15;
+                    
+                    let colorClass = 'stroke-slate-600', widthClass = 'stroke-[2px]';
+                    if (T) {
+                        if (T.v1[inIdx] !== T.v0[inIdx]) { colorClass = 'stroke-amber-500'; widthClass = 'stroke-[3px]'; }
+                        else if (T.v1[inIdx] === 1) colorClass = 'stroke-emerald-500';
+                    }
+                    
+                    let midX = sx + 10 + ((inIdx * 7) % 25);
+                    if (sx > dx) {
+                        let downY = sy + 30 + ((inIdx * 5) % 20);
+                        svg += `<path d="M ${sx},${sy} L ${sx+10},${sy} L ${sx+10},${downY} L ${dx-10},${downY} L ${dx-10},${dy} L ${dx},${dy}" class="wire ${colorClass} ${widthClass}" />`;
+                    } else {
+                        svg += `<path d="M ${sx},${sy} L ${midX},${sy} L ${midX},${dy} L ${dx},${dy}" class="wire ${colorClass} ${widthClass}" />`;
+                    }
+                });
+            });
+            
+            C.outs.forEach((outIdx, i) => {
+                let srcName = C.nm[outIdx], src = C.nodes[srcName];
+                let label = C.outLabels ? C.outLabels[i] : (C.kind.includes('Mult') ? 'M'+i : (i < (C.outs.length-1) ? 'S'+i : 'Cout'));
+                let dest = C.nodes[label];
+                let colorClass = 'stroke-slate-600';
+                if (T) {
+                    if (T.v1[outIdx] !== T.v0[outIdx]) colorClass = 'stroke-amber-500';
+                    else if (T.v1[outIdx] === 1) colorClass = 'stroke-emerald-500';
+                }
+                svg += `<path d="M ${src.x+15},${src.y} L ${dest.x},${dest.y}" class="wire ${colorClass} stroke-[2px]" />`;
+                svg += `<text x="${dest.x+5}" y="${dest.y+4}" class="text-[11px] fill-slate-300 font-mono">${label}</text>`;
+            });
+
+            for(let name in C.nodes) {
+                if (!C.G.find(gx => gx.id === name) && !isOutNode(C, name)) {
+                    let n = C.nodes[name];
+                    let valStr = T ? `=${T.v1[C.nm.indexOf(name)]}` : '';
+                    svg += `<text x="${n.x-30}" y="${n.y+4}" class="text-[11px] fill-slate-400 font-mono">${name}${valStr}</text>`;
+                    svg += `<circle cx="${n.x}" cy="${n.y}" r="3" class="fill-slate-500" />`;
+                }
+            }
+
+            C.G.forEach(g => {
+                let isFaulty = T && T.fm[g.k] >= 0, isSelected = selectedGate === g.k;
+                let heat = currentRun.rows[g.k].sens / maxSens;
+                
+                let shapeColor = g.t === 'AND' ? 'text-cyan-400' : (g.t === 'OR' ? 'text-emerald-400' : (g.t === 'NOT' ? 'text-amber-400' : 'text-violet-400'));
+                if (isFaulty) shapeColor = 'text-rose-500';
+                
+                let fillOp = 0.1 + (heat * 0.5);
+                let fx = "";
+                if(isSelected) fx = `filter="drop-shadow(0 0 5px rgba(232,234,236,0.45))"`;
+                else if(isFaulty) fx = `filter="drop-shadow(0 0 5px rgba(195,110,88,0.6))"`;
+                
+                let strokeW = isSelected ? 3 : 2;
+                let gColor = isSelected ? 'text-white' : shapeColor;
+                
+                svg += `<g transform="translate(${g.x}, ${g.y})" class="gate-node" onclick="selectGate(${g.k})" ${fx}>
+                    <g class="${gColor}" style="fill: currentColor; stroke: currentColor; fill-opacity: ${fillOp}; stroke-width: ${strokeW}">
+                        ${gateShapes[g.t]}
+                    </g>
+                    <text x="0" y="26" text-anchor="middle" class="text-[9.5px] fill-slate-300 font-mono">${g.id}</text>
+                </g>`;
+            });
+
+            document.getElementById('svgbox').innerHTML = `<svg id="circ-svg" width="100%" height="100%" viewBox="0 0 ${C.width} ${C.height}" preserveAspectRatio="xMidYMid meet" class="block overflow-visible"><g id="circ-root">${svg}</g></svg>`;
+            fitCircuit();
+        }
+
+        /* Fit each schematic at the largest uniform scale its panel can hold. The circuit builders'
+           coordinates and gate dimensions stay intact; only the SVG viewBox changes. */
+        function fitCircuit() {
+            const pane = document.getElementById('pane-visualizer'), s = document.getElementById('circ-svg'), g = document.getElementById('circ-root');
+            if (!pane || !s || !g) return;
+            const PW = pane.clientWidth, PH = pane.clientHeight;
+            if (!PW || !PH) return;                       // pane hidden: refit when shown
+            let b; try { b = g.getBBox(); } catch (e) { return; }
+            if (!(b.width > 0 && b.height > 0)) return;
+            const pad = 18, bw = b.width + 2*pad, bh = b.height + 2*pad;
+            const KMAX = 1.05, FRAME = 36, sideW = 320;
+            const rowH = Math.min(Math.max(220, window.innerHeight * 0.28), 270);
+            const kBottom = Math.min(Math.min((PW - FRAME) / bw, (PH - rowH - FRAME) / bh), KMAX);
+            const kSide   = Math.min(Math.min((PW - sideW - FRAME) / bw, (PH - FRAME) / bh), KMAX);
+            pane.dataset.layout = (kSide > kBottom) ? 'side' : 'bottom';
+            const r = s.getBoundingClientRect();           // measured after the layout switch
+            if (!r.width || !r.height) return;
+            const k = Math.min(r.width / bw, r.height / bh, KMAX);
+            const vw = r.width / k, vh = r.height / k;
+            s.setAttribute('viewBox', `${b.x - pad - (vw - bw)/2} ${b.y - pad - (vh - bh)/2} ${vw} ${vh}`);
+        }
+
+        function selectGate(idx) {
+            selectedGate = idx; drawCirc();
+            if(!LS) return;
+            const r = currentRun.rows[idx], g = currentRun.C.G[idx];
+            document.getElementById('inspector-content').innerHTML = `
+                <div class="space-y-1.5">
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Gate</span> <span class="font-mono text-white text-sm">${g.id}</span></div>
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Type</span> <span class="font-mono text-cyan-400">${g.t}</span></div>
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Inputs</span> <span class="font-mono text-slate-300">${g.in.map(i=>currentRun.C.nm[i]).join(', ')}</span></div>
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Faults / Injected</span> <span class="font-mono text-slate-300">${r.fail} / ${r.inj}</span></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Sensitivity</span> <span class="font-mono text-amber-400 font-semibold text-base">${r.sens.toFixed(4)}</span></div>
+                </div>
+            `;
+            updateGateChart(idx);
+        }
+
+        function updateGateChart(gateIndex) {
+            const r = currentRun.rows[gateIndex], S = LS;
+            const isBernoulli = S.model === 'bern';
+            const currentP = Math.min(100, Math.max(0, Number(S.p) || 0));
+            const xMax = isBernoulli
+                ? Math.min(100, Math.max(5, currentP * 2))
+                : Math.max(1, (Number(S.t) || 0) * 1.5);
+            const xTitle = isBernoulli ? 'GATE FAULT PROBABILITY (%)' : 'MISSION TIME (HOURS)';
+            const currentIndex = isBernoulli ? Math.round(currentP / xMax * 20) : -1;
+            const labels = [], errProbs = [];
+            for (let i = 0; i <= 20; i++) {
+                const x = xMax * i / 20;
+                let gateFailureProbability;
+                if (isBernoulli) {
+                    gateFailureProbability = x / 100;
+                } else if (S.model === 'weib') {
+                    const eta = Math.max(Number(S.eta) || 0, 0.000001);
+                    gateFailureProbability = 1 - Math.exp(-Math.pow(x / eta, Math.max(Number(S.beta) || 0, 0.000001)));
+                } else {
+                    const lambda = Math.max(Number(S.lam) || 0, 0);
+                    gateFailureProbability = 1 - Math.exp(-lambda * x);
+                }
+                labels.push(x.toFixed(isBernoulli ? 2 : 1));
+                errProbs.push(gateFailureProbability * r.sens * 100);
+            }
+            if (chartGateTimeInst) {
+                chartGateTimeInst.data.labels = labels;
+                chartGateTimeInst.data.datasets[0].data = errProbs;
+                chartGateTimeInst.update('none');
+                return;
+            }
+            chartGateTimeInst = new Chart(document.getElementById('chartGateTime'), {
+                type: 'line',
+                data: { labels, datasets: [{
+                    label: 'GATE-ATTRIBUTABLE ERROR PROBABILITY',
+                    data: errProbs,
+                    borderColor: '#86a0bb',
+                    backgroundColor: '#86a0bb',
+                    borderWidth: 2,
+                    pointRadius: context => context.dataIndex === currentIndex ? 4 : 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#d3d7db',
+                    pointHoverBorderColor: '#86a0bb',
+                    pointHoverBorderWidth: 2,
+                    fill: false,
+                    tension: 0
+                }] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    interaction: { mode: 'nearest', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(20,23,27,0.96)',
+                            borderColor: '#3d4650',
+                            borderWidth: 1,
+                            displayColors: false,
+                            titleColor: '#e8eaec',
+                            bodyColor: '#d3d7db',
+                            padding: 10,
+                            callbacks: {
+                                title: items => isBernoulli
+                                    ? `GATE FAULT PROBABILITY: ${items[0].label}%`
+                                    : `MISSION TIME: ${items[0].label} H`,
+                                label: item => `ERROR IMPACT: ${Number(item.raw).toPrecision(4)}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(116,128,138,0.14)', drawTicks: false },
+                            border: { display: false },
+                            ticks: { color: '#97a1aa', maxTicksLimit: 6, padding: 8 },
+                            title: { display: true, text: xTitle, color: '#b9c0c6', font: { size: 10, weight: '600' }, padding: { top: 8 } }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grace: '8%',
+                            grid: { color: 'rgba(116,128,138,0.18)', drawTicks: false },
+                            border: { display: false },
+                            ticks: { color: '#97a1aa', maxTicksLimit: 5, padding: 8, callback: value => `${Number(value).toPrecision(3)}%` },
+                            title: { display: true, text: 'GATE-ATTRIBUTABLE ERROR PROBABILITY', color: '#b9c0c6', font: { size: 10, weight: '600' }, padding: { bottom: 8 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function injectFault(gateIdx) {
+            if(!LS) return;
+            const r = rng(LS.seed + Date.now()), C = currentRun.C, fm = new Int8Array(C.G.length).fill(-1), v0 = new Uint8Array(C.ns), v1 = new Uint8Array(C.ns);
+            let target = gateIdx !== undefined ? gateIdx : (r() * C.G.length | 0);
+            fm[target] = LS.fti < 0 ? (r() * 3 | 0) : LS.fti;
+            const inb = r() * (1 << C.nin) | 0;
+            ev(C, inb, null, v0); ev(C, inb, fm, v1);
+            T = { fm, v0, v1, inb };
+            drawCirc();
+            
+            let gOut = wd(C, T.v0), yOut = wd(C, T.v1), gateId = C.G[target].id, faultType = ['SA0', 'SA1', 'FLIP'][T.fm[target]], masked = (gOut === yOut);
+            document.getElementById('trace-content').innerHTML = `
+                <div class="space-y-1.5">
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Inputs</span> <span class="font-mono text-cyan-300 text-base">${T.inb.toString(2).padStart(C.nin, '0')}</span></div>
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Fault</span> <span class="font-mono text-rose-400 font-semibold">${gateId} (${faultType})</span></div>
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Correct Out</span> <span class="font-mono text-emerald-400 text-base">${gOut.toString(2).padStart(C.outs.length, '0')}</span></div>
+                    <div class="flex justify-between border-b border-slate-700/50 pb-1"><span class="text-slate-500">Faulty Out</span> <span class="font-mono text-rose-400 text-base">${yOut.toString(2).padStart(C.outs.length, '0')}</span></div>
+                </div>
+                <div class="mt-2 p-2 rounded-lg text-center font-bold text-xs tracking-wide ${masked ? 'bg-emerald-900/30 text-emerald-400 border border-emerald-800/50' : 'bg-rose-900/30 text-rose-400 border border-rose-800/50'}">
+                    ${masked ? 'FAULT MASKED' : 'FAULT PROPAGATED'}
+                </div>
+            `;
+        }
+        function injectSelectedFault() { if(selectedGate !== null) injectFault(selectedGate); }
+
+        function updateAnalysisCharts() {
+            const a = currentRun;
+            if(chartRelProb) chartRelProb.destroy();
+            chartRelProb = new Chart(document.getElementById('chartRelProb'), { type: 'line', data: { labels: a.pp.map(p => p[0]), datasets: [{ label: 'RELIABILITY', data: a.pp.map(p => p[1]), borderColor: '#79ada6', backgroundColor: 'rgba(121,173,166,0.12)', fill:true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { title: {display: true, text: 'RELIABILITY VS FAULT PROBABILITY (%)', color: '#e8eaec', font: {size: 14}} } } });
+
+            if(chartRelTime) chartRelTime.destroy();
+            chartRelTime = new Chart(document.getElementById('chartRelTime'), { type: 'line', data: { labels: a.te.map(p => p[0].toFixed(1)), datasets: [ { label: 'EXPONENTIAL', data: a.te.map(p => p[1]), borderColor: '#79ada6', tension: 0.3 }, { label: 'WEIBULL', data: a.tw.map(p => p[1]), borderColor: '#c8745f', tension: 0.3 } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { title: {display: true, text: 'RELIABILITY VS TIME (HOURS)', color: '#e8eaec', font: {size: 14}} } } });
+            
+            if(chartConv) chartConv.destroy();
+            chartConv = new Chart(document.getElementById('chartConv'), { type: 'line', data: { labels: a.st.cv.map(p => p[0]), datasets: [{ label: 'RUNNING ESTIMATE', data: a.st.cv.map(p => p[1]), borderColor: '#a99bbd', backgroundColor: 'rgba(169,155,189,0.12)', fill:true, tension: 0.1 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'logarithmic' } }, plugins: { title: {display: true, text: 'MONTE CARLO CONVERGENCE', color: '#e8eaec', font: {size: 14}} } } });
+            
+            let tbody = '';
+            [...a.rows].sort((x,y) => y.sens - x.sens).forEach(r => { tbody += `<tr><td class="px-5 py-3 font-semibold text-white">${r.id}</td><td class="px-5 py-3 text-cyan-300">${r.type}</td><td class="px-5 py-3 text-slate-300">${r.fail}</td><td class="px-5 py-3 text-amber-400 font-semibold">${r.sens.toFixed(4)}</td></tr>`; });
+            document.getElementById('vuln-table-body').innerHTML = tbody;
+        }
+
+        function updateCompareTab() {
+            let tbody = '';
+            Object.keys(runs).forEach(key => {
+                let r = runs[key], rel = pc(1 - r.st.fail / r.st.N), topGate = [...r.rows].sort((a,b)=>b.sens-a.sens)[0];
+                tbody += `<tr><td class="px-6 py-5 text-white">${r.C.kind}</td><td class="px-6 py-5 text-emerald-400 font-bold">${rel}</td><td class="px-6 py-5 text-slate-300">${r.C.G.length}</td><td class="px-6 py-5 font-mono text-amber-400">${topGate.id} <span class="text-slate-500 ml-2">(${topGate.sens.toFixed(3)})</span></td></tr>`;
+            });
+            document.getElementById('compare-table-body').innerHTML = tbody;
+            
+            if(chartCmp) chartCmp.destroy();
+            let colors = ['#79ada6', '#a99bbd', '#c8745f', '#9bb98c', '#d4ae63', '#86a0bb', '#c48f9f', '#a9b56a'];
+            let datasets = Object.keys(runs).map((key, i) => ({ label: runs[key].C.kind.toUpperCase(), data: runs[key].pp.map(p => p[1]), borderColor: colors[i % colors.length], tension: 0.3, borderWidth: 3 }));
+            chartCmp = new Chart(document.getElementById('chartCmp'), { type: 'line', data: { labels: runs['rca4'].pp.map(p => p[0]), datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, plugins: { title: {display: true, text: 'CROSS-ARCHITECTURE RELIABILITY VS FAULT PROB (%)', color: '#e8eaec', font: {size: 16}} } } });
+        }
+
+        window.addEventListener('resize', fitCircuit);
+
+        // Initialize empty run on load to show UI
+        runAll();
+    </script>
+</body>
+</html>
+
+
+
